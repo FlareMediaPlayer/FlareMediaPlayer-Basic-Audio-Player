@@ -1,0 +1,18 @@
+{
+    "name": "FlareUI-Basic-Audio",
+    "version": "1.0.0",
+    "keywords": ["util", "functional", "server", "client", "browser"],
+    "author": "Brian Parra",
+    "contributors": [],
+    "dependencies": {
+        
+    },
+    "devDependencies": {
+        "browserify": "^13.0.1",
+        "browserify-shim": "^3.5.0"
+    },
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "build" : "browserify src/media-player.js > build/media-player.js"
+    }
+}
