@@ -11,54 +11,24 @@ class AudioEngine {
         this.audioData = null;
         this.audioBuffer = null;
         this.audioSource = null;
-        this.buffering = true;
 
-        this.stateCodes = {
-            0: "new",
-            1: "buffering",
-            2: "ready",
-            3: "playing"
-        };
 
-        this.state = {
-            readyState: this.stateCodes[0]
-        };
 
-        this.eventQueue = [];
+        this.state = 0;
 
+       
     }
 
-    boot(audioData) {
-        this.state.readyState = this.stateCodes[1];
-        this.audioData = audioData;
-
-        this.context.decodeAudioData(this.audioData).then(function (buffer) {
-
-            this.audioBuffer = buffer;
-            this.state.readyState = this.stateCodes[2];
-            this.processEventQueue();
-
-        }.bind(this));
-
-
-    }
-
-    play() {
-        
-        if (this.state.readyState === this.stateCodes[2]) {
+    play(buffer) {
 
             this.audioSource = this.context.createBufferSource();
-            this.audioSource.buffer = this.audioBuffer;
+            this.audioSource.buffer = buffer;
             this.audioSource.connect(this.context.destination);
             //bind the handlers
             this.audioSource.onended = this.handlePlayEnd.bind(this);
 
             this.audioSource.start(0);
             this.startTime = this.context.currentTime;
-            
-        } else {
-            this.eventQueue.push(this.play);
-        }
 
     }
     
@@ -82,17 +52,8 @@ class AudioEngine {
 
     }
 
-    processEventQueue() {
-
-        var callback;
-        for (var i = 0; i < this.eventQueue.length; i++) {
-            callback = this.eventQueue.shift();
-            callback.call();
-        }
-    }
-
     handlePlayEnd() {
-        console.log("ended");
+        this.onEndedCallback.call();
     }
 
 }
@@ -104,23 +65,11 @@ var basicPlayer = class BasicPlayer extends AudioEngine {
 
     constructor(url) {
         super();
-        this.buffering = true;
-
-        //Now we hide the getting of the audio file 
-
-        var request = new XMLHttpRequest();
-        request.open('GET', "intro.m4a", true);
-        request.responseType = 'arraybuffer';
-        request.send();
-        request.onload = this.processRequestData.bind(this);
-    }
-
-    processRequestData(e) {
-        this.boot(e.target.response);
+    
     }
     
-    getDuration(){
-        return this.audioSource.buffer.duration;
+    registerEndFunction(onEndedCallback){
+        this.onEndedCallback = onEndedCallback;
     }
 
 }
@@ -189,6 +138,7 @@ Flare.FlareOscillator = class {
     }
 
 };
+
 /**
  * Create class for final packaged Media Player
  */
@@ -200,20 +150,33 @@ Flare.MediaPlayer = class {
      * 
      * @param {type} url the resource url of the audio file
      */
-    constructor(url) {
+    constructor(options) {
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        this.options = {
+            element : null,
+            resource : null
+        }; // Set your default options, or add more if necessary
+        
+        this.parseOptions(options);
+        
+        console.log(options.element === this.options.element);
+        
         this.state = 2;
         this.stateCodes = {
             0 : "new",
             1 : "loading",
             2 : "ready",
             3 : "playing"
-        }
+        };
         
-        this.audioEngine = new Flare.AudioEngine(url); //We are using the basic audio engine
-        this.ui = new Flare.UI();
+        
+        this.audioEngine = new Flare.AudioEngine("test"); //We are using the basic audio engine
+        this.ui = new Flare.UI(this.options.element);
         this.oscillator = new Flare.FlareOscillator();
+        
+        this.bufferData();
 
-        //bind the controls
+        //bind the callbacks
         var _this= this;
         this.ui.registerPlayButtonCallback(function(){
             _this.handlePlayClick();
@@ -222,7 +185,50 @@ Flare.MediaPlayer = class {
         this.oscillator.registerUpdateFunction(function(){
             _this.update();
         });
+        
+        this.audioEngine.registerEndFunction(function(){
+            _this.handlePlayEnd();
+        });
 
+        
+    }
+    
+    bufferData(){
+        
+        var request = new XMLHttpRequest();
+        request.open('GET', this.options.resource , true);
+        request.responseType = 'arraybuffer';
+        request.send();
+        request.onload = this.decodeAudio.bind(this);
+        
+    }
+    
+    decodeAudio(e) {
+        
+        this.audioData = e.target.response;
+
+        this.audioContext.decodeAudioData(this.audioData).then(function (buffer) {
+
+            this.audioBuffer = buffer;
+
+
+        }.bind(this));
+
+    }
+    
+    parseOptions(options){
+        
+        if (typeof options.element != 'undefined') {
+
+            this.options.element = options.element;
+
+        }
+        
+        if (typeof options.resource != 'undefined') {
+
+            this.options.resource = options.resource;
+
+        }
         
     }
     
@@ -230,29 +236,43 @@ Flare.MediaPlayer = class {
      * Handles logic for when the play button is clicked.
      */
     handlePlayClick(){
+        
         console.log("clickes");
         if(this.state === 2){
             //start playing
             this.state = 3;
             this.oscillator.run();
-            this.audioEngine.play();
+            this.audioEngine.play(this.audioBuffer);
+            this.ui.setState(2);
             
         }else{
             //Pause
             this.state = 2;
             this.oscillator.stop();
             this.audioEngine.stop();
+            this.ui.setState(0);
         }
         
     }
     
+    handlePlayEnd(){
+        
+        this.state = 2;
+        this.oscillator.stop();
+        this.audioEngine.stop();
+        this.ui.setState(0);
+        
+    }
+    
     update(){
+        
         console.log();
-        var duration = this.audioEngine.getDuration();
+        var duration = this.audioBuffer.duration;
         var audioTime = this.audioEngine.getCurrentTime();
         var startTime = this.audioEngine.getStartTime();
         var progress = (audioTime - startTime) / duration;
         this.ui.updatePlayProgress(progress);
+        
     }
 
     processRequestData(e) {
@@ -263,6 +283,45 @@ Flare.MediaPlayer = class {
 
 
 
+Flare.MediaPlayerFactory = class {
+
+    static loadMediaPlayers() {
+        
+        var mediaPlayerElement;
+        var mediaPlayerElements = document.getElementsByTagName("flaremediaplayer");
+
+        for(var i = 0; i< mediaPlayerElements.length ; i++){
+            
+            mediaPlayerElement = mediaPlayerElements[i];
+            
+            var sources = mediaPlayerElement.getElementsByTagName("source");
+            
+            var source;
+            
+            for(var n = 0; n< sources.length ; n++){
+                //check each source to see if valid
+                source = sources[n];
+                
+                break;
+            }
+            
+            var options = {
+                element : mediaPlayerElement,
+                resource : source.src
+            };
+            
+
+            var mediaPlayer = new Flare.MediaPlayer(options);
+            
+        }
+        
+    }
+
+};
+
+Flare.MediaPlayerFactory.loadMediaPlayers();
+
+
 
 /**
  * If you would like to use this script as a stand alone, use this line to expose
@@ -270,7 +329,7 @@ Flare.MediaPlayer = class {
  * other scripts you probably won't need it as long as the compiler resolves all of the
  * require calls.
  */
-window.Flare = Flare;
+//window.Flare = Flare;
 
 },{"flare-audio-engine":1,"flare-ui-basic-audio-player":3}],3:[function(require,module,exports){
 'use strict';
@@ -284,6 +343,10 @@ class FlareDomElement {
      * @returns {nm$_flare-ui-basic-audio-player.FlareDomElement}
      */
     constructor(tagName, mainClassName) {
+        
+        this.state = "0"; //0 ready, 1 buffering, 2 playing, -1 error
+        
+        
         this.tagName = tagName;
         this.mainClassName = mainClassName;
         this.baseClassName = "flare";
@@ -329,14 +392,14 @@ class FlareDomElement {
         }
     }
     
+
     
 }
 
 class FlareUI {
 
-    constructor(mediaPlayer) {
+    constructor() {
         
-        this.mediaPlayer = mediaPlayer;
         this.baseClass = "flare";
 
         this.playerElements = {};
@@ -367,7 +430,7 @@ class FlareUI {
 
     appendToDom() {
         //Allways append the container 
-        this.domLocation.appendChild(this.playerElements.container.element);
+        this.target.appendChild(this.playerElements.container.element);
     }
 
     renderElements() {
@@ -375,10 +438,6 @@ class FlareUI {
         for (var key in this.playerElements) {
             this.playerElements[key].render();
         }
-    }
-    
-    update(){
-        
     }
     
     updatePlayProgress(percent){
@@ -389,6 +448,31 @@ class FlareUI {
     handlePlayClick(e){
         
         this.playButtonCallback.call();
+        
+    }
+    
+    setState(state){
+        
+        this.state = state;
+        switch(this.state){
+            case -1:
+                //display error
+                this.playerElements.playButton.setContent("&#8709;");
+            case 0 :
+                //display ready state
+                this.playerElements.playButton.setContent("&#9658;");
+                break;
+            case 1: 
+                //display loading state
+                this.playerElements.playButton.setContent("&#9862;");
+                break;
+            case 2:
+                //display play state
+                this.playerElements.playButton.setContent("&#9612;&#9612;");
+                break;
+            default:
+                //display error on all others
+        }
         
     }
     
@@ -407,11 +491,11 @@ class BasicAudioPlayer extends FlareUI {
         
         
         this.target = target; // The desired location to append the player to
-        this.parseTarget(); //parse the desired location to append to
+        //this.parseTarget(); //parse the desired location to append to
         this.boot(); // Here we create our player
         this.renderElements(); //Applies all custom settings to the elements
         this.appendToDom(); //add our finished player to the DOM
-        this.updatePlayProgress(0.7);
+        this.updatePlayProgress(0);
         console.log("ui loaded");
         
         
@@ -423,7 +507,8 @@ class BasicAudioPlayer extends FlareUI {
         this.playerElements.container.setStyles({
             'background-color': 'black',
             height: '40px',
-            color : "white"
+            color : "white",
+            display : "block"
         });
 
         this.playerElements.controls = new FlareDomElement("div", "controls");
@@ -445,8 +530,6 @@ class BasicAudioPlayer extends FlareUI {
             cursor : "pointer"
 
         });
-
-
         this.playerElements.playButton.setContent("&#9658;");
 
         this.playerElements.timeIndicator = new FlareDomElement("div", "time-indicator");
@@ -492,6 +575,8 @@ class BasicAudioPlayer extends FlareUI {
         this.playerElements.playButton.element.onclick = this.handlePlayClick.bind(this);
 
     }
+    
+ 
 
 }
 
