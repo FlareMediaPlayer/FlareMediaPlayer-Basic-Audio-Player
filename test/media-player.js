@@ -44,7 +44,7 @@ class AudioEngine {
     }
 
     play() {
-
+        
         if (this.state.readyState === this.stateCodes[2]) {
 
             this.audioSource = this.context.createBufferSource();
@@ -54,10 +54,20 @@ class AudioEngine {
             this.audioSource.onended = this.handlePlayEnd.bind(this);
 
             this.audioSource.start(0);
+            this.startTime = this.context.currentTime;
+            
         } else {
             this.eventQueue.push(this.play);
         }
 
+    }
+    
+    getCurrentTime(){
+        return this.context.currentTime;
+    }
+    
+    getStartTime(){
+        return this.startTime;
     }
 
     togglePlay() {
@@ -108,6 +118,10 @@ var basicPlayer = class BasicPlayer extends AudioEngine {
     processRequestData(e) {
         this.boot(e.target.response);
     }
+    
+    getDuration(){
+        return this.audioSource.buffer.duration;
+    }
 
 }
 
@@ -122,6 +136,60 @@ Flare.AudioEngine = require('flare-audio-engine'); //import our audio engine
 Flare.UI = require('flare-ui-basic-audio-player');// import our ui;
 
 /**
+ * 
+ * @type Function|constructor
+ */
+Flare.FlareOscillator = class {
+
+    constructor() {
+        this.running = false;
+        this._this = this;
+
+    }
+
+    run() {
+
+        var _this = this;
+        this._loopFunction = function (time) {
+            return _this.updateRequestAnimationFrame(time);
+        };
+        this.running = true;
+        this._eventId = window.requestAnimationFrame(this._loopFunction);
+
+    }
+
+    /**
+     * Stop running the update loop
+     * @function stop
+     */
+    stop() {
+
+        window.cancelAnimationFrame(this._eventId);
+        this.running = false;
+
+    }
+
+    /**
+     * This is the loop function using RequestAnimationFrame
+     * Perform update logic here
+     * @param {number} time update time
+     * @function updateRequestAnimationFrame
+     */
+    updateRequestAnimationFrame(time) {
+
+        //console.log(time);
+
+        this._eventId = window.requestAnimationFrame(this._loopFunction);
+        this.updateFunction.call();
+
+    }
+    
+    registerUpdateFunction(updateFunction){
+        this.updateFunction = updateFunction;
+    }
+
+};
+/**
  * Create class for final packaged Media Player
  */
 Flare.MediaPlayer = class {
@@ -133,10 +201,62 @@ Flare.MediaPlayer = class {
      * @param {type} url the resource url of the audio file
      */
     constructor(url) {
+        this.state = 2;
+        this.stateCodes = {
+            0 : "new",
+            1 : "loading",
+            2 : "ready",
+            3 : "playing"
+        }
+        
         this.audioEngine = new Flare.AudioEngine(url); //We are using the basic audio engine
         this.ui = new Flare.UI();
+        this.oscillator = new Flare.FlareOscillator();
 
         //bind the controls
+        var _this= this;
+        this.ui.registerPlayButtonCallback(function(){
+            _this.handlePlayClick();
+        });
+        
+        this.oscillator.registerUpdateFunction(function(){
+            _this.update();
+        });
+
+        
+    }
+    
+    /**
+     * Handles logic for when the play button is clicked.
+     */
+    handlePlayClick(){
+        console.log("clickes");
+        if(this.state === 2){
+            //start playing
+            this.state = 3;
+            this.oscillator.run();
+            this.audioEngine.play();
+            
+        }else{
+            //Pause
+            this.state = 2;
+            this.oscillator.stop();
+            this.audioEngine.stop();
+        }
+        
+    }
+    
+    update(){
+        console.log();
+        var duration = this.audioEngine.getDuration();
+        var audioTime = this.audioEngine.getCurrentTime();
+        var startTime = this.audioEngine.getStartTime();
+        var progress = (audioTime - startTime) / duration;
+        this.ui.updatePlayProgress(progress);
+    }
+
+    processRequestData(e) {
+
     }
 
 };
@@ -157,13 +277,13 @@ window.Flare = Flare;
 /**
  * Class for interfacing with DOM elements and keep track of attributes/classes to add
  */
-class FlareDomElement{
+class FlareDomElement {
     /**
      * 
      * @param {type} tagName type of element to create
      * @returns {nm$_flare-ui-basic-audio-player.FlareDomElement}
      */
-    constructor(tagName, mainClassName){
+    constructor(tagName, mainClassName) {
         this.tagName = tagName;
         this.mainClassName = mainClassName;
         this.baseClassName = "flare";
@@ -172,43 +292,57 @@ class FlareDomElement{
         this.attributes = {};
         this.styles = {};
     }
-    
-    addClass(){
+
+    addClass() {
 
     }
-    
-    addChild(element){
-        this.element.addChild(element);
+
+    addChild(element) {
+        this.element.appendChild(element.element);
     }
-    
-    setBaseClassName(className){
+
+    setBaseClassName(className) {
         this.baseClassName = className;
     }
-    
-    render(){
+
+    render() {
         this.element.className = "";
         this.element.classList.add(this.baseClassName + "-" + this.mainClassName);
-        for(var key in this.styles){
+        for (var key in this.styles) {
             this.element.style.setProperty(key, this.styles[key]);
         }
-        
+
     }
-    
-    setStyles(styles){
+
+    setStyles(styles) {
         this.styles = styles
     }
 
+    setContent(content) {
+        this.element.innerHTML = content;
+    }
+    
+    renderStyles(styles){
+        for(var key in styles){
+            this.styles[key] = styles[key];
+            this.element.style.setProperty(key, styles[key]);
+        }
+    }
+    
+    
 }
 
 class FlareUI {
-    
-    constructor(){
+
+    constructor(mediaPlayer) {
+        
+        this.mediaPlayer = mediaPlayer;
         this.baseClass = "flare";
-        
+
         this.playerElements = {};
-        
+
     }
-    
+
     setStyle(element, styles) {
 
         for (var style in styles) {
@@ -216,66 +350,148 @@ class FlareUI {
         }
 
     }
-    
-    applyStyles(){
-        //Go through each element in the player
-        for (var playerElement in this.playerElements){
-            for(var elementClass in playerElement.classes){
-                playerElement.element.style.setProperty(style);
-            }
-        }
-    }
-    
-    parseTarget(){
-        
+
+    parseTarget() {
+
         if (this.target) {
             if (typeof this.target === 'string') {
                 this.domLocation = document.getElementById(this.target);
             } else if (typeof this.target === 'object' && this.target.nodeType === 1) {
                 this.domLocation = this.target;
             }
-        }else{
+        } else {
             this.domLocation = document.body;
         }
-        
+
     }
-    
-    appendToDom(){
+
+    appendToDom() {
         //Allways append the container 
         this.domLocation.appendChild(this.playerElements.container.element);
     }
-    
-    renderElements(){
+
+    renderElements() {
         //console.log(this.playerElements);
-        for (var key in this.playerElements){
+        for (var key in this.playerElements) {
             this.playerElements[key].render();
         }
     }
+    
+    update(){
+        
+    }
+    
+    updatePlayProgress(percent){
+
+        this.playerElements.playProgress.renderStyles({"transform" : "scaleX(" + percent + ")"});
+    }
+    
+    handlePlayClick(e){
+        
+        this.playButtonCallback.call();
+        
+    }
+    
+    registerPlayButtonCallback(callback){
+        this.playButtonCallback = callback;
+    }
+    
 }
 
 class BasicAudioPlayer extends FlareUI {
 
     constructor(target) {
         super();
+        
+        this.playButtonColor = "red";
+        
+        
         this.target = target; // The desired location to append the player to
         this.parseTarget(); //parse the desired location to append to
         this.boot(); // Here we create our player
         this.renderElements(); //Applies all custom settings to the elements
         this.appendToDom(); //add our finished player to the DOM
+        this.updatePlayProgress(0.7);
         console.log("ui loaded");
+        
+        
     }
 
     boot() {
 
-        this.playerElements.container = new FlareDomElement("div" , "container");
+        this.playerElements.container = new FlareDomElement("div", "container");
         this.playerElements.container.setStyles({
-            'background-color': 'rgba(0,0,0,0.4)',
-            width : '60px',
-            height: '40px'
+            'background-color': 'black',
+            height: '40px',
+            color : "white"
         });
 
-    }
+        this.playerElements.controls = new FlareDomElement("div", "controls");
+        this.playerElements.controls.setStyles({
+            display: "table",
+            "white-space" : "nowrap",
+            height : "100%",
+            
+        });
 
+        this.playerElements.playButton = new FlareDomElement("div", "play-button");
+        this.playerElements.playButton.setStyles({
+            height: '100%',
+            width: '30px',
+            display: "table-cell",
+            "vertical-align" : "middle",
+            padding : "0 10px",
+            "background-color" : this.playButtonColor,
+            cursor : "pointer"
+
+        });
+
+
+        this.playerElements.playButton.setContent("&#9658;");
+
+        this.playerElements.timeIndicator = new FlareDomElement("div", "time-indicator");
+        this.playerElements.timeIndicator.setContent("0:00 / 0:01");
+        this.playerElements.timeIndicator.setStyles({
+            height: '100%',
+            display: "table-cell",
+            padding : "0 10px",
+            "vertical-align" : "middle"
+            
+
+        });
+
+        this.playerElements.progressContainer = new FlareDomElement("div", "progress-container");
+        this.playerElements.progressContainer.setStyles({
+            height: '100%',
+            width : "100%",
+            display: "table-cell",
+            position : "relative"
+
+        });
+        
+        this.playerElements.playProgress = new FlareDomElement("div", "play-progress");
+        this.playerElements.playProgress.setStyles({
+            'transform-origin': '0 0 ',
+            'background-color': 'rgba(0,0,255,0.4)',
+            position : "absolute",
+            top : "0",
+            bottom : "0",
+            left : "0",
+            right : "0"
+
+        });
+
+        this.playerElements.container.addChild(this.playerElements.controls);
+        this.playerElements.controls.addChild(this.playerElements.playButton);
+        this.playerElements.controls.addChild(this.playerElements.progressContainer);
+        this.playerElements.progressContainer.addChild(this.playerElements.playProgress);
+        this.playerElements.controls.addChild(this.playerElements.timeIndicator);
+        
+        
+        //Finally Bind the controllers
+        this.playerElements.playButton.element.onclick = this.handlePlayClick.bind(this);
+
+    }
 
 }
 

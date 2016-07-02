@@ -48,11 +48,15 @@ Flare.FlareOscillator = class {
      */
     updateRequestAnimationFrame(time) {
 
-
-        console.log(time);
+        //console.log(time);
 
         this._eventId = window.requestAnimationFrame(this._loopFunction);
+        this.updateFunction.call();
 
+    }
+    
+    registerUpdateFunction(updateFunction){
+        this.updateFunction = updateFunction;
     }
 
 };
@@ -68,15 +72,58 @@ Flare.MediaPlayer = class {
      * @param {type} url the resource url of the audio file
      */
     constructor(url) {
+        this.state = 2;
+        this.stateCodes = {
+            0 : "new",
+            1 : "loading",
+            2 : "ready",
+            3 : "playing"
+        }
+        
         this.audioEngine = new Flare.AudioEngine(url); //We are using the basic audio engine
         this.ui = new Flare.UI();
         this.oscillator = new Flare.FlareOscillator();
 
         //bind the controls
+        var _this= this;
+        this.ui.registerPlayButtonCallback(function(){
+            _this.handlePlayClick();
+        });
+        
+        this.oscillator.registerUpdateFunction(function(){
+            _this.update();
+        });
 
-
-        //this.oscillator.run();
-
+        
+    }
+    
+    /**
+     * Handles logic for when the play button is clicked.
+     */
+    handlePlayClick(){
+        console.log("clickes");
+        if(this.state === 2){
+            //start playing
+            this.state = 3;
+            this.oscillator.run();
+            this.audioEngine.play();
+            
+        }else{
+            //Pause
+            this.state = 2;
+            this.oscillator.stop();
+            this.audioEngine.stop();
+        }
+        
+    }
+    
+    update(){
+        console.log();
+        var duration = this.audioEngine.getDuration();
+        var audioTime = this.audioEngine.getCurrentTime();
+        var startTime = this.audioEngine.getStartTime();
+        var progress = (audioTime - startTime) / duration;
+        this.ui.updatePlayProgress(progress);
     }
 
     processRequestData(e) {
