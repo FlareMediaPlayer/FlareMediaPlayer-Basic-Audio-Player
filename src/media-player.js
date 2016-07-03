@@ -15,7 +15,7 @@ Flare.FlareOscillator = class {
     constructor() {
         this.running = false;
         this._this = this;
-
+        
     }
 
     run() {
@@ -73,23 +73,23 @@ Flare.MediaPlayer = class {
      * @param {type} url the resource url of the audio file
      */
     constructor(options) {
+        
         this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         this.options = {
             element : null,
             resource : null
         }; // Set your default options, or add more if necessary
         
+        this.timelinePosition = 0;
+        this.startTime = 0;
+        this.stopTime = 0;
+        
+        
         this.parseOptions(options);
+
         
-        console.log(options.element === this.options.element);
-        
-        this.state = 2;
-        this.stateCodes = {
-            0 : "new",
-            1 : "loading",
-            2 : "ready",
-            3 : "playing"
-        };
+        this.state = 0;
+
         
         
         this.audioEngine = new Flare.AudioEngine("test"); //We are using the basic audio engine
@@ -132,6 +132,7 @@ Flare.MediaPlayer = class {
         this.audioContext.decodeAudioData(this.audioData).then(function (buffer) {
 
             this.audioBuffer = buffer;
+            this.ui.initializeTimeline(buffer.duration);
 
 
         }.bind(this));
@@ -159,7 +160,36 @@ Flare.MediaPlayer = class {
      */
     handlePlayClick(){
         
-        console.log("clickes");
+        switch (this.state) {
+            case 0:
+                //ready
+                this.state = 2;
+                this.oscillator.run();
+                console.log(this.timelinePosition);
+                this.startTime = this.audioEngine.play(this.audioBuffer, this.timelinePosition);
+                this.ui.setState(2);
+            
+                //start playback
+                break;
+            case 1:
+                //buffering
+                //play after buffering finishes
+                break;
+            case 2:
+                //playing
+                //stop playback
+                this.state = 0;
+                this.oscillator.stop();
+                this.stopTime = this.audioEngine.stop();
+                this.startTime - this.stopTime; // Total time played in this run
+                this.timelinePosition += this.stopTime - this.startTime; //record total timeline progress
+                console.log(this.timelinePosition);
+                this.ui.setState(0);
+                break;
+            default:
+            //error
+        }
+        /*
         if(this.state === 2){
             //start playing
             this.state = 3;
@@ -174,12 +204,14 @@ Flare.MediaPlayer = class {
             this.audioEngine.stop();
             this.ui.setState(0);
         }
+                        */
         
     }
     
     handlePlayEnd(){
         
-        this.state = 2;
+        this.state = 0;
+        this.timelinePosition = 0; // reset the timeline back to the beginning
         this.oscillator.stop();
         this.audioEngine.stop();
         this.ui.setState(0);
@@ -189,11 +221,19 @@ Flare.MediaPlayer = class {
     update(){
         
         console.log();
+        //update the timeline progress
         var duration = this.audioBuffer.duration;
         var audioTime = this.audioEngine.getCurrentTime();
-        var startTime = this.audioEngine.getStartTime();
-        var progress = (audioTime - startTime) / duration;
+        //var startTime = this.audioEngine.getStartTime();
+        //var progress = (audioTime - startTime) / duration;
+        //console.log(this.timelinePosition);
+        this.currentPlayTime = this.timelinePosition + (audioTime - this.startTime);
+        var progress = this.currentPlayTime / duration;
+        if(progress >= 1)
+            this.handlePlayEnd();
+        //console.log(progress);
         this.ui.updatePlayProgress(progress);
+        this.ui.updateTimeDisplay(this.currentPlayTime);
         
     }
 
