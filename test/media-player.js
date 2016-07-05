@@ -735,10 +735,7 @@ class BasicAudioPlayer extends FlareUI {
             width: '50px',
             "background-color": "green",
             cursor: "pointer",
-            "user-drag": "element",
-            "-moz-user-select": "none",
-            "-webkit-user-drag": "element",
-            "-webkit-user-select": "none"
+            position: "relative"
 
         });
 
@@ -750,16 +747,33 @@ class BasicAudioPlayer extends FlareUI {
             "touch-action": "none",
             "role": "slider"
         });
-        
+
         this.playerElements.volumeSliderInner = new FlareDomSliderElement("div", "volume-slider-inner");
         this.playerElements.volumeSliderInner.setStyles({
             height: '100%',
             width: '100%',
             "background-color": "#4bf74b",
-            "transform-origin" : "0px bottom",
-            transform : "scaleY(0)"
+            "transform-origin": "0px bottom",
+            transform: "scaleY(0)",
+            position: "absolute"
         });
 
+        this.playerElements.volumeSliderDisplayContainer = new FlareDomSliderElement("div", "volume-slider-display-container");
+        this.playerElements.volumeSliderDisplayContainer.setStyles({
+            height: '100%',
+            width: '100%',
+            position: "absolute",
+            display: "table"
+        });
+
+        this.playerElements.volumeSliderDisplay = new FlareDomSliderElement("div", "volume-slider-display");
+        this.playerElements.volumeSliderDisplay.setStyles({
+            height: '100%',
+            "text-align": "center",
+            "vertical-align": "middle",
+            display: "table-cell"
+        });
+        this.playerElements.volumeSliderDisplay.setContent("	&#128266;");
 
 
         this.playerElements.timeIndicator = new FlareDomElement("div", "time-indicator");
@@ -802,6 +816,8 @@ class BasicAudioPlayer extends FlareUI {
         this.playerElements.controls.addChild(this.playerElements.volumeContainer);
         this.playerElements.volumeContainer.addChild(this.playerElements.volumeSliderOuter);
         this.playerElements.volumeSliderOuter.addChild(this.playerElements.volumeSliderInner);
+        this.playerElements.volumeSliderOuter.addChild(this.playerElements.volumeSliderDisplayContainer);
+        this.playerElements.volumeSliderDisplayContainer.addChild(this.playerElements.volumeSliderDisplay);
 
         //Finally Bind the controllers
         this.playerElements.playButton.element.onclick = this.handlePlayClick.bind(this);
@@ -814,7 +830,7 @@ class BasicAudioPlayer extends FlareUI {
 
     handleVolumeChanged(valueData) {
         this.playerElements.volumeSliderInner.renderStyles({
-            transform : "scaleY(" + valueData.percent + ")"
+            transform: "scaleY(" + valueData.percent + ")"
         });
     }
 
