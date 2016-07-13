@@ -1,19 +1,31 @@
 {
-    "name": "FlareUI-Basic-Audio",
-    "version": "1.0.0",
-    "keywords": ["util", "functional", "server", "client", "browser"],
-    "author": "Brian Parra",
+    "name": "flare-media-player-basic-audio",
+    "version": "0.0.0",
+    "keywords": ["Flare Media Player", "Audio Player"],
+    "license" : "MIT",
+    "author": {
+        "name" : "Brian Parra",
+        "email" : "develop@brianparra.com"
+    },
     "contributors": [],
     "dependencies": {
-        "flare-audio-engine" : "0.0.0",
-        "flare-ui-basic-audio-player" : "0.0.0"
+        "flare-audio-engine" : "^0.0.1",
+        "flare-ui-basic-audio-player" : "^0.0.0",
+        "flare-oscillator" : "^0.0.0"
     },
     "devDependencies": {
         "browserify": "^13.0.1",
-        "browserify-shim": "^3.5.0"
+        "browserify-shim": "^3.5.0",
+        "uglify-js" : "2.7.0",
+        "babel-cli" : "6.10.1",
+        "babel-preset-es2015" : "6.9.0"
     },
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1",
-        "build" : "browserify src/media-player.js > test/media-player.js"
+        "test": "browserify src/media-player.js > test/media-player.js",
+        "build" : "browserify src/media-player.js | babel --presets es2015 |uglifyjs - -o build/media-player-$version.min.js"
+    },
+    "repository" : {
+        "type" : "git",
+        "url" : "https://github.com/FlareMediaPlayer/FlareMediaPlayer-Basic-Audio-Player.git"
     }
 }

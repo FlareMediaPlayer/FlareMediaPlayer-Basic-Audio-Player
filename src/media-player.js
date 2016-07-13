@@ -1,71 +1,22 @@
-
+'use strict';
+/**
+ * Part of the FlareMediaPlayer Project
+ * 
+ * visit www.FlareMediaPlayer.com
+ * Contact develop@brianparra.com
+ */
 //namespace flare
 var Flare = Flare || {};
 
 
 Flare.AudioEngine = require('flare-audio-engine'); //import our audio engine
 Flare.UI = require('flare-ui-basic-audio-player');// import our ui;
-
-/**
- * 
- * @type Function|constructor
- */
-Flare.FlareOscillator = class {
-
-    constructor() {
-        
-        this.running = false;
-        this._this = this;
-       
-    }
-
-    run() {
-
-        var _this = this;
-        this._loopFunction = function (time) {
-            return _this.updateRequestAnimationFrame(time);
-        };
-        this.running = true;
-        this._eventId = window.requestAnimationFrame(this._loopFunction);
-
-    }
-
-    /**
-     * Stop running the update loop
-     * @function stop
-     */
-    stop() {
-
-        window.cancelAnimationFrame(this._eventId);
-        this.running = false;
-
-    }
-
-    /**
-     * This is the loop function using RequestAnimationFrame
-     * Perform update logic here
-     * @param {number} time update time
-     * @function updateRequestAnimationFrame
-     */
-    updateRequestAnimationFrame(time) {
-
-        //console.log(time);
-
-        this._eventId = window.requestAnimationFrame(this._loopFunction);
-        this.updateFunction.call();
-
-    }
-
-    registerUpdateFunction(updateFunction) {
-        this.updateFunction = updateFunction;
-    }
-
-};
+Flare.Oscillator = require('flare-oscillator');
 
 /**
  * Create class for final packaged Media Player
  */
-Flare.MediaPlayer = class {
+Flare.BasicAudioPlayer = class {
 
     /**
      * For a simple media player, our constructor will simply take the url,
@@ -84,21 +35,21 @@ Flare.MediaPlayer = class {
         this.timelinePosition = 0;
         this.startTime = 0;
         this.stopTime = 0;
-
+        this.errorMessage = "";
 
         this.parseOptions(options);
 
-        this.volume = 0.4;
+        this.volume = 1;
         this.state = 0;
 
-        
+
 
         this.audioEngine = new Flare.AudioEngine("test"); //We are using the basic audio engine
         this.ui = new Flare.UI(this.options.element);
         this.ui.setVolume(this.volume);
-        this.oscillator = new Flare.FlareOscillator();
-        
-        
+        this.oscillator = new Flare.Oscillator();
+
+
 
         //bind the callbacks
         var _this = this;
@@ -122,19 +73,19 @@ Flare.MediaPlayer = class {
         this.ui.addVolumeChangedListener(function (valueData) {
             _this.audioEngine.handleVolumeChanged(valueData);
         });
-        
+
         //Start loading data immediately
         this.bufferData();
-        
+
     }
 
     bufferData() {
-        
+
         this.state = 1;
         this.ui.setState(1);
         this.oscillator.run();
-  
-  
+
+
         var request = new XMLHttpRequest();
         request.open('GET', this.options.resource, true);
         request.responseType = 'arraybuffer';
@@ -147,19 +98,27 @@ Flare.MediaPlayer = class {
 
         this.audioData = e.target.response;
 
-        this.audioContext.decodeAudioData(this.audioData).then(function (buffer) {
+        this.audioContext.decodeAudioData(this.audioData, function (buffer) {
 
             this.audioBuffer = buffer;
             this.duration = buffer.duration;
             this.ui.loadMetaData({duration: buffer.duration});
-        
+
             //loading complete , ready
             this.state = 0;
             this.ui.setState(0);
             this.oscillator.stop();
 
 
-        }.bind(this));
+        }.bind(this),
+        
+                function (e) {
+                    //throw error state
+                    this.state = -1;
+                    this.ui.setState(-1);
+
+
+                }.bind(this));
 
     }
 
@@ -185,6 +144,8 @@ Flare.MediaPlayer = class {
     handlePlayClick() {
 
         switch (this.state) {
+            case -1:
+                break;
             case 0:
                 //ready
                 this.state = 2;
@@ -232,14 +193,15 @@ Flare.MediaPlayer = class {
 
         switch (this.state) {
             case 0:
+                //no animations for now
                 break;
             case 1:
-                
+                //Loading
                 this.ui.updateLoadingAnimation();
                 break;
-                
+
             case 2:
-                
+                //Playing
                 var audioTime = this.audioEngine.getCurrentTime();
                 this.currentPlayTime = this.timelinePosition + (audioTime - this.startTime);
                 var progress = Math.min(Math.max((this.currentPlayTime / this.duration), 0), 1);
@@ -249,7 +211,7 @@ Flare.MediaPlayer = class {
                 //console.log(progress);
                 this.ui.updatePlayProgress(progress);
                 this.ui.updateTimeDisplay(this.currentPlayTime);
-                
+
                 break;
             default:
         }
@@ -264,7 +226,24 @@ Flare.MediaPlayer = class {
         console.log(valueData);
         this.timelinePosition = this.duration * valueData.percent;
         console.log(this.duration);
-        console.log( valueData.percent);
+        console.log(valueData.percent);
+    }
+
+    /**
+     * Factory function for building the media player
+     * @param {type} mediaPlayerElement the element in which to place the media player
+     */
+    static loadPlayer(mediaPlayerElement) {
+        
+        var sources = mediaPlayerElement.getElementsByTagName("source");
+        var source = sources[0]; // for now just pull the first source
+        
+        var options = {
+            element: mediaPlayerElement,
+            resource: source.src
+        };
+        
+        var mediaPlayer = new Flare.BasicAudioPlayer(options);
     }
 
 };
@@ -277,35 +256,29 @@ Flare.MediaPlayerFactory = class {
 
         var mediaPlayerElement;
         var mediaPlayerElements = document.getElementsByTagName("flaremediaplayer");
+        var playerType;
 
         for (var i = 0; i < mediaPlayerElements.length; i++) {
 
             mediaPlayerElement = mediaPlayerElements[i];
-
-            var sources = mediaPlayerElement.getElementsByTagName("source");
-
-            var source;
-
-            for (var n = 0; n < sources.length; n++) {
-                //check each source to see if valid
-                source = sources[n];
-
-                break;
+            playerType = mediaPlayerElement.getAttribute("type");
+            if(playerType in Flare.MediaPlayerFactory.mediaPlayers){
+                Flare.MediaPlayerFactory.mediaPlayers[playerType].loadPlayer(mediaPlayerElement);
             }
-
-            var options = {
-                element: mediaPlayerElement,
-                resource: source.src
-            };
-
-            var mediaPlayer = new Flare.MediaPlayer(options);
 
         }
 
     }
 
+    static registerMediaPlayers(mediaPlayers) {
+        Flare.MediaPlayerFactory.mediaPlayers = mediaPlayers;
+    }
+
 };
 
+Flare.MediaPlayerFactory.registerMediaPlayers({
+    "basic-player": Flare.BasicAudioPlayer
+});
 Flare.MediaPlayerFactory.loadMediaPlayers();
 
 
