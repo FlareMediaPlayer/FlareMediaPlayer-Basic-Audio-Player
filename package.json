@@ -1,5 +1,7 @@
 {
     "name": "flare-media-player-basic-audio",
+    "main" : "src/media-player.js",
+    "description" : "A fully functioning basic Flare Audio Player",
     "version": "0.0.0",
     "keywords": ["Flare Media Player", "Audio Player"],
     "license" : "MIT",
