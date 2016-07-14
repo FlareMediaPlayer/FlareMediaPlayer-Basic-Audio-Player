@@ -22,7 +22,7 @@
     },
     "scripts": {
         "test": "browserify src/media-player.js > test/media-player.js",
-        "build" : "browserify src/media-player.js | babel --presets es2015 |uglifyjs - -o build/media-player-$version.min.js"
+        "build" : "make build-release"
     },
     "repository" : {
         "type" : "git",
